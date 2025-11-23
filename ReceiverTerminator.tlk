@@ -1,0 +1,34 @@
+;; Filename: ReceiverTerminator.tlk
+;; Contract B: Receives the ping and unconditionally terminates the transaction.
+;; 合约 B：接收 Ping 消息并无条件终止交易。
+
+#include "stdlib.tlk"
+
+;; Internal function that acts as the failure point
+() terminate_process() impure {
+    
+    ;; Check flags to ensure we don't bounce our own bounces
+    slice msg_slice = in_msg_full().begin_parse(); 
+    int flags = msg_slice.load_uint(6);
+    
+    if (flags & 1) {
+        "ReceiverTerminator: Received a bounce, stopping." print;
+        return;
+    }
+    
+    ;; --- RichBounce Trigger ---
+    
+    "ReceiverTerminator: Ping received. Initiating termination sequence." print;
+    
+    ;; **Action:** Use throw with a new unique error code (12345)
+    ;; This triggers the RichBounce mechanism back to the sender (SenderInitiator).
+    throw(12345); 
+    
+    ;; Execution halts here.
+}
+
+;; Standard entry point for internal messages
+() recv_internal(int balance, int msg_value, cell in_msg_full, cell in_msg_body) impure {
+    ;; Call the terminator function
+    terminate_process();
+}
