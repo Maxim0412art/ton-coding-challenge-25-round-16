@@ -1,0 +1,64 @@
+;; Filename: SenderInitiator.tlk
+;; Contract A: Sends a 'Ping' message and implements a dedicated function to catch the subsequent RichBounce.
+;; 合约 A：发送一个 'Ping' 消息，并实现一个专用函数来捕获随后的 RichBounce。
+
+#include "stdlib.tlk"
+
+;; Define the RichBounce catch mechanism
+() bounce_catcher(cell ricochet_cell) impure inline {
+    
+    ;; Store the incoming RichBounce data in c1
+    c1 = ricochet_cell;
+    
+    ;; Log successful capture
+    "SenderInitiator: Caught the error ricochet (RichBounce)!" print;
+    
+    ;; Check the error op code (usually 0xFFFFFFFF)
+    slice data_s = ricochet_cell.begin_parse();
+    int op_code = data_s.load_uint(32); 
+    "Ricochet Op Code:" print_int; op_code print_int;
+    
+    return;
+}
+
+;; Main receiver function
+() recv_internal(int balance, int msg_value, cell in_msg_full, cell in_msg_body) impure {
+    
+    ;; Step 1: Check for Bounce message
+    slice header_slice = in_msg_full.begin_parse();
+    int flags = header_slice.load_uint(6);
+    
+    if (flags & 1) {
+        ;; Process the RichBounce
+        bounce_catcher(in_msg_body);
+        return;
+    }
+    
+    ;; --- Step 2: Send Ping Message ---
+    
+    ;; Target address B (Unique Placeholder: 0x99AAFFCC)
+    cell target_b_addr_cell = begin_cell().store_uint(0x99AAFFCC, 32).end_cell(); 
+    slice target_b_addr = target_b_addr_cell.begin_parse();
+
+    ;; Create the message body with a unique op code (0x8008135)
+    cell ping_body = begin_cell()
+        .store_uint(0x8008135, 32) ;; Unique Ping op code
+        .store_ref(in_msg_body)    ;; Embed the original payload as a reference
+        .end_cell();
+
+    ;; Send the message to B. 
+    ;; Use Mode 1: Send all remaining balance (guarantees payment and bounceability).
+    send_raw_message(
+        begin_cell()
+            .store_slice(target_b_addr)
+            .store_coins(0) 
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(0, 1) ;; no init
+            .store_uint(0, 1) ;; no data
+            .store_ref(ping_body)
+        .end_cell(), 
+        1 
+    );
+
+    "SenderInitiator: Ping sent (OP: 0x8008135). Awaiting error response." print;
+}
